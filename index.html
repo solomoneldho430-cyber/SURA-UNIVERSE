@@ -611,6 +611,11 @@
     clampBird();
     rebuildScenery();
 
+    // ✅ difficulty base should match new screen size after resize/orientation
+    DIFF.base.pipeSpeed = null; // force recapture
+    captureBaseDifficultyOnce();
+    applyDifficultyByScore();
+
     if (frozenOnDeath){
       deathSnapshot = null;
     }
@@ -649,6 +654,58 @@
 
     groundH = Math.max(76, base * 0.18);
     groundY = H - groundH;
+  }
+
+  // ---------- DIFFICULTY SCALING (✅ ADDED) ----------
+  // Harder as score increases:
+  // - pipeSpeed increases
+  // - gap shrinks
+  // - pipes spawn slightly more often
+  // Clamped so it stays playable.
+  const DIFF = {
+    base: {
+      pipeSpeed: null,
+      gapMin: null,
+      gapMax: null,
+      spawnEvery: null,
+    }
+  };
+
+  function captureBaseDifficultyOnce(){
+    if (DIFF.base.pipeSpeed === null){
+      DIFF.base.pipeSpeed = pipeSpeed;
+      DIFF.base.gapMin = gapMin;
+      DIFF.base.gapMax = gapMax;
+      DIFF.base.spawnEvery = spawnEvery;
+    }
+  }
+
+  function applyDifficultyByScore(){
+    captureBaseDifficultyOnce();
+
+    // Score cap for scaling (after this it stops getting harder)
+    const s = Math.min(score, 60);
+    const t = s / 60; // 0..1
+
+    // Smooth curve
+    const ease = t * t * (3 - 2 * t);
+
+    // Speed: +0% → +55%
+    pipeSpeed = DIFF.base.pipeSpeed * (1 + 0.55 * ease);
+
+    // Gap: -0% → -28%
+    const gapScale = (1 - 0.28 * ease);
+    gapMin = DIFF.base.gapMin * gapScale;
+    gapMax = DIFF.base.gapMax * gapScale;
+
+    // Spawn rate: -0% → -22% (smaller = more frequent)
+    spawnEvery = Math.floor(DIFF.base.spawnEvery * (1 - 0.22 * ease));
+
+    // Safety clamps
+    pipeSpeed = clamp(pipeSpeed, 2.6, 8.0);
+    gapMin = clamp(gapMin, 118, 9999);
+    gapMax = clamp(gapMax, gapMin + 18, 9999);
+    spawnEvery = Math.floor(clamp(spawnEvery, 58, 160));
   }
 
   // ---------- GAME STATE ----------
@@ -840,6 +897,9 @@
     score = 0;
     scoreEl.textContent = '0';
     gameOver.classList.add('hidden');
+
+    // ✅ reset difficulty back to base
+    applyDifficultyByScore();
 
     clampBird();
     bird.y = H * 0.45;
@@ -1365,6 +1425,9 @@
           p.passed = true;
           score++;
           scoreEl.textContent = String(score);
+
+          // ✅ harder as you pass pipes
+          applyDifficultyByScore();
         }
       });
 
@@ -1428,6 +1491,11 @@
   // ---------- START ----------
   resizeCanvas();
   rebuildScenery();
+
+  // ✅ capture baseline difficulty once at startup (after recomputeParams ran)
+  captureBaseDifficultyOnce();
+  applyDifficultyByScore();
+
   showSplash();
 })();
 </script>
