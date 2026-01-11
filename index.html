@@ -13,16 +13,27 @@
       --danger:#ff6b6b;
     }
     *{box-sizing:border-box}
+
+    /* ✅ FIX (iPhone scroll):
+       - don't lock the entire body with overflow:hidden
+       - allow page scrolling by default
+    */
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       background:#000;
       color:var(--fg);
-      overflow:hidden;
-      height:100vh;
-      width:100vw;
+      height:100%;
+      width:100%;
+      overflow-x:hidden;
+      overflow-y:auto;
+      -webkit-overflow-scrolling: touch;
     }
 
+    /* ✅ FIX:
+       - allow splash/select to scroll if content is taller than screen
+       - use min-height instead of fixed height
+    */
     .layer{
       position:fixed;
       inset:0;
@@ -32,6 +43,9 @@
       flex-direction:column;
       padding:24px;
       background: #000;
+
+      overflow-y:auto;                /* ✅ allow scroll inside */
+      -webkit-overflow-scrolling:touch;
     }
     .hidden{ display:none !important; }
 
@@ -67,6 +81,7 @@
       font-size: 13px;
       opacity:0.9;
       text-align:center;
+      padding-bottom: 20px; /* ✅ gives iOS a bit of extra scroll room */
     }
     .disclaimerBox{
       margin-top:14px;
@@ -98,6 +113,7 @@
       padding: 18px;
       position:relative;
       overflow:hidden;
+      margin: 24px 0; /* ✅ makes room when scrolling on mobile */
     }
     .panel:before{
       content:"";
@@ -270,6 +286,15 @@
       justify-content:stretch;
       background:#000;
     }
+
+    /* ✅ FIX (when game is open, lock scrolling again) */
+    body.game-active{
+      overflow:hidden;
+      height:100vh;
+      width:100vw;
+      touch-action:none;
+    }
+
     canvas{
       width:100vw;
       height:100vh;
@@ -403,7 +428,6 @@
     <h1 class="fade-in delay1">SURA UNIVERSE PRESENTS</h1>
     <p class="fade-in delay2">SURA GAMES 2025</p>
 
-    <!-- ✅ Added disclaimer on starting screen -->
     <div class="disclaimerBox fade-in delay3">
       <b>Disclaimer</b><br/>
       This game is a work of parody and fiction.<br/>
@@ -441,7 +465,6 @@
           <div class="meta"><div class="name">SAYIP OP BRO</div></div>
         </div>
 
-        <!-- Coming soon (not clickable) -->
         <div class="card disabled" data-char="eagle" data-coming="true" aria-disabled="true">
           <span class="coming">Coming Soon</span>
           <div class="avatar"><img src="eagle.png" alt="Eagle Gaming" onerror="this.style.display='none'"></div>
@@ -471,7 +494,6 @@
       <div class="pill"><b>Character:</b> <span id="charName">—</span></div>
     </div>
 
-    <!-- ✅ Small, non-distracting in-game disclaimer -->
     <div id="gameDisclaimer" class="gameDisclaimer hidden">
       Parody & fiction • For entertainment only • No endorsement implied
     </div>
@@ -492,7 +514,6 @@
     </div>
   </div>
 
-  <!-- Landing music (loop on splash + select only) -->
   <audio id="loadingMusic" preload="auto">
     <source src="Prithviraj Singing pachamanga.mp3" type="audio/mpeg">
   </audio>
@@ -515,9 +536,16 @@
   const homeBtn = document.getElementById('homeBtn');
 
   const loadingMusic = document.getElementById('loadingMusic');
-
-  // ✅ in-game disclaimer element
   const gameDisclaimer = document.getElementById('gameDisclaimer');
+
+  // ✅ helper: lock/unlock scroll for iOS properly
+  function setScrollLock(isLocked){
+    if (isLocked){
+      document.body.classList.add('game-active');
+    } else {
+      document.body.classList.remove('game-active');
+    }
+  }
 
   // ---------- CHAR CONFIG ----------
   const CHARACTERS = {
@@ -533,7 +561,6 @@
   let jumpSfx = new Audio();
   let dieSfx  = new Audio();
 
-  // Prevent double-death + ensure menu shows after death audio ends
   let dyingLock = false;
 
   // ---------- FREEZE-ON-DEATH ----------
@@ -585,7 +612,7 @@
     rebuildScenery();
 
     if (frozenOnDeath){
-      deathSnapshot = null; // avoid stretching frozen snapshot after rotate
+      deathSnapshot = null;
     }
   }
   window.addEventListener('resize', resizeCanvas);
@@ -823,12 +850,11 @@
   }
 
   function showSplash(){
+    setScrollLock(false); // ✅ allow scroll on splash
     splash.classList.remove('hidden');
     select.classList.add('hidden');
     gameWrap.classList.add('hidden');
     gameOver.classList.add('hidden');
-
-    // ✅ hide in-game disclaimer outside of gameplay
     gameDisclaimer.classList.add('hidden');
 
     ensureLoadingMusicPlaying();
@@ -836,24 +862,23 @@
   }
 
   function showSelect(){
+    setScrollLock(false); // ✅ allow scroll on select
     splash.classList.add('hidden');
     select.classList.remove('hidden');
     gameWrap.classList.add('hidden');
     gameOver.classList.add('hidden');
-
-    // ✅ hide in-game disclaimer outside of gameplay
     gameDisclaimer.classList.add('hidden');
 
     ensureLoadingMusicPlaying();
   }
 
   function showGame(){
+    setScrollLock(true); // ✅ lock scroll in gameplay
     splash.classList.add('hidden');
     select.classList.add('hidden');
     gameWrap.classList.remove('hidden');
     gameOver.classList.add('hidden');
 
-    // ✅ show small disclaimer during gameplay only
     gameDisclaimer.classList.remove('hidden');
 
     stopLoadingMusic();
@@ -909,7 +934,6 @@
     if (!running) return;
 
     bird.vy = jumpVel;
-
     try{ jumpSfx.currentTime = 0; jumpSfx.play(); } catch(e){}
   }
   window.addEventListener('keydown', (e) => {
@@ -929,7 +953,7 @@
 
   homeBtn.addEventListener('click', () => {
     gameOver.classList.add('hidden');
-    showSelect();
+    showSelect(); // ✅ unlock scroll again
   });
 
   // ---------- COLLISION ----------
@@ -937,20 +961,17 @@
     return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
   }
 
-  // IMPORTANT: freeze visuals on death + wait for dying audio, then show menu
   async function die(){
     if (dyingLock) return;
     dyingLock = true;
 
     running = false;
-
     stopLoadingMusic();
 
     captureDeathSnapshot();
     frozenOnDeath = true;
 
     await playSoundAndWait(dieSfx);
-
     showGameOverMenu();
   }
 
@@ -1006,14 +1027,6 @@
       ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
       ctx.fill();
     }
-  }
-
-  function spawnShootingStar(initial=false){
-    const y = rand(20, H*0.35);
-    const x = initial ? rand(0, W) : rand(W*1.1, W*1.6);
-    const len = rand(120, 260);
-    const sp = rand(9, 14);
-    return { x, y, len, vx: -sp, vy: sp*0.28, life: rand(90, 160), t: 0 };
   }
 
   function drawShootingStars(){
