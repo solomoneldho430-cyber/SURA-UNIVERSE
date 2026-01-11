@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>SURA GAMES - Flappy Meme</title>
   <style>
     :root{
@@ -14,42 +14,50 @@
     }
     *{box-sizing:border-box}
 
-    /* ✅ FIX (iPhone scroll):
-       - don't lock the entire body with overflow:hidden
-       - allow page scrolling by default
-    */
+    /* ✅ Mobile scroll baseline */
+    html, body{
+      height:100%;
+      width:100%;
+    }
     body{
       margin:0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       background:#000;
       color:var(--fg);
-      height:100%;
-      width:100%;
       overflow-x:hidden;
       overflow-y:auto;
       -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
     }
 
-    /* ✅ FIX:
-       - allow splash/select to scroll if content is taller than screen
-       - use min-height instead of fixed height
+    /* ✅ Layers now SCROLL on phone:
+       - position: fixed keeps it full screen
+       - allow vertical scrolling inside each layer
+       - IMPORTANT: use height:100dvh (or 100vh fallback) + align-items:flex-start so content can extend
     */
     .layer{
       position:fixed;
       inset:0;
       display:flex;
-      align-items:center;
-      justify-content:center;
       flex-direction:column;
+      align-items:center;
+      justify-content:flex-start;     /* ✅ so the top is reachable and content can scroll */
       padding:24px;
-      background: #000;
-
-      overflow-y:auto;                /* ✅ allow scroll inside */
+      background:#000;
+      overflow-y:auto;               /* ✅ scroll inside layer */
       -webkit-overflow-scrolling:touch;
+      height:100vh;
+      height:100dvh;                 /* ✅ better on iOS */
+      overscroll-behavior: contain;
+      touch-action: pan-y;
     }
     .hidden{ display:none !important; }
 
     /* Splash */
+    .splash{
+      padding-top: clamp(42px, 8vh, 90px);
+      text-align:center;
+    }
     .splash h1{
       margin:0;
       font-size: clamp(26px, 5vw, 54px);
@@ -81,7 +89,7 @@
       font-size: 13px;
       opacity:0.9;
       text-align:center;
-      padding-bottom: 20px; /* ✅ gives iOS a bit of extra scroll room */
+      padding-bottom: 26px; /* extra scroll room */
     }
     .disclaimerBox{
       margin-top:14px;
@@ -113,7 +121,7 @@
       padding: 18px;
       position:relative;
       overflow:hidden;
-      margin: 24px 0; /* ✅ makes room when scrolling on mobile */
+      margin: 18px 0 28px;
     }
     .panel:before{
       content:"";
@@ -188,7 +196,6 @@
       box-shadow: 0 12px 26px rgba(0,0,0,.58);
     }
 
-    /* Coming soon cards */
     .card.disabled{
       cursor:not-allowed;
       opacity:0.72;
@@ -242,7 +249,7 @@
     .avatar img{
       width:100%;
       height:100%;
-      object-fit: contain; /* do not crop */
+      object-fit: contain;
       background: rgba(0,0,0,0.25);
     }
     .meta{ display:flex; flex-direction:column; justify-content:center; gap:6px; min-width:0; }
@@ -260,7 +267,7 @@
       display:flex;
       gap:10px;
       margin-top:10px;
-      padding: 0 10px 10px;
+      padding: 0 10px 18px;
       color: var(--muted);
       font-size: 13px;
       align-items:center;
@@ -287,9 +294,9 @@
       background:#000;
     }
 
-    /* ✅ FIX (when game is open, lock scrolling again) */
+    /* ✅ Lock scroll only during gameplay */
     body.game-active{
-      overflow:hidden;
+      overflow:hidden !important;
       height:100vh;
       width:100vw;
       touch-action:none;
@@ -328,7 +335,6 @@
     }
     .pill b{ letter-spacing:.03em; }
 
-    /* Small in-game disclaimer (non-distracting) */
     .gameDisclaimer{
       position:fixed;
       right: 10px;
@@ -455,8 +461,9 @@
           <div class="meta"><div class="name">SURA</div></div>
         </div>
 
-        <div class="card" data-char="SOJAPPAN">
-          <div class="avatar"><img src="prithviraj.png" alt="Prithviraj" onerror="this.style.display='none'"></div>
+        <!-- ✅ FIXED: must match key in CHARACTERS -->
+        <div class="card" data-char="prithviraj">
+          <div class="avatar"><img src="prithviraj.png" alt="Sojappan" onerror="this.style.display='none'"></div>
           <div class="meta"><div class="name">SOJAPPAN</div></div>
         </div>
 
@@ -574,7 +581,6 @@
       deathSnapshot = null;
     }
   }
-
   function drawDeathSnapshot(){
     if (!deathSnapshot) return false;
     try{
@@ -656,12 +662,7 @@
     groundY = H - groundH;
   }
 
-  // ---------- DIFFICULTY SCALING (✅ ADDED) ----------
-  // Harder as score increases:
-  // - pipeSpeed increases
-  // - gap shrinks
-  // - pipes spawn slightly more often
-  // Clamped so it stays playable.
+  // ---------- DIFFICULTY SCALING ----------
   const DIFF = {
     base: {
       pipeSpeed: null,
@@ -683,25 +684,18 @@
   function applyDifficultyByScore(){
     captureBaseDifficultyOnce();
 
-    // Score cap for scaling (after this it stops getting harder)
     const s = Math.min(score, 60);
-    const t = s / 60; // 0..1
-
-    // Smooth curve
+    const t = s / 60;
     const ease = t * t * (3 - 2 * t);
 
-    // Speed: +0% → +55%
     pipeSpeed = DIFF.base.pipeSpeed * (1 + 0.55 * ease);
 
-    // Gap: -0% → -28%
     const gapScale = (1 - 0.28 * ease);
     gapMin = DIFF.base.gapMin * gapScale;
     gapMax = DIFF.base.gapMax * gapScale;
 
-    // Spawn rate: -0% → -22% (smaller = more frequent)
     spawnEvery = Math.floor(DIFF.base.spawnEvery * (1 - 0.22 * ease));
 
-    // Safety clamps
     pipeSpeed = clamp(pipeSpeed, 2.6, 8.0);
     gapMin = clamp(gapMin, 118, 9999);
     gapMax = clamp(gapMax, gapMin + 18, 9999);
@@ -852,7 +846,7 @@
     window.removeEventListener('pointerdown', gestureUnlockAudio);
     window.removeEventListener('keydown', gestureUnlockAudio);
   }
-  window.addEventListener('pointerdown', gestureUnlockAudio);
+  window.addEventListener('pointerdown', gestureUnlockAudio, { passive:true });
   window.addEventListener('keydown', gestureUnlockAudio);
 
   function playSoundAndWait(audio){
@@ -898,7 +892,6 @@
     scoreEl.textContent = '0';
     gameOver.classList.add('hidden');
 
-    // ✅ reset difficulty back to base
     applyDifficultyByScore();
 
     clampBird();
@@ -910,7 +903,7 @@
   }
 
   function showSplash(){
-    setScrollLock(false); // ✅ allow scroll on splash
+    setScrollLock(false);
     splash.classList.remove('hidden');
     select.classList.add('hidden');
     gameWrap.classList.add('hidden');
@@ -922,25 +915,27 @@
   }
 
   function showSelect(){
-    setScrollLock(false); // ✅ allow scroll on select
+    setScrollLock(false);
     splash.classList.add('hidden');
     select.classList.remove('hidden');
     gameWrap.classList.add('hidden');
     gameOver.classList.add('hidden');
     gameDisclaimer.classList.add('hidden');
 
+    // ✅ make sure you're at the top when opening select, but still scrollable down to Thoppi/Eagle
+    try { select.scrollTop = 0; } catch(e) {}
+
     ensureLoadingMusicPlaying();
   }
 
   function showGame(){
-    setScrollLock(true); // ✅ lock scroll in gameplay
+    setScrollLock(true);
     splash.classList.add('hidden');
     select.classList.add('hidden');
     gameWrap.classList.remove('hidden');
     gameOver.classList.add('hidden');
 
     gameDisclaimer.classList.remove('hidden');
-
     stopLoadingMusic();
 
     resizeCanvas();
@@ -955,7 +950,7 @@
 
   // ---------- CHARACTER SELECT ----------
   document.querySelectorAll('.card').forEach(card => {
-    card.addEventListener('click', async () => {
+    card.addEventListener('click', () => {
       if (card.dataset.coming === "true") return;
       const key = card.getAttribute('data-char');
       if (!CHARACTERS[key]) return;
@@ -1002,7 +997,7 @@
       doJump();
     }
   });
-  canvas.addEventListener('pointerdown', () => doJump());
+  canvas.addEventListener('pointerdown', () => doJump(), { passive:true });
 
   restartBtn.addEventListener('click', () => {
     gameOver.classList.add('hidden');
@@ -1013,7 +1008,7 @@
 
   homeBtn.addEventListener('click', () => {
     gameOver.classList.add('hidden');
-    showSelect(); // ✅ unlock scroll again
+    showSelect();
   });
 
   // ---------- COLLISION ----------
@@ -1425,8 +1420,6 @@
           p.passed = true;
           score++;
           scoreEl.textContent = String(score);
-
-          // ✅ harder as you pass pipes
           applyDifficultyByScore();
         }
       });
@@ -1491,11 +1484,8 @@
   // ---------- START ----------
   resizeCanvas();
   rebuildScenery();
-
-  // ✅ capture baseline difficulty once at startup (after recomputeParams ran)
   captureBaseDifficultyOnce();
   applyDifficultyByScore();
-
   showSplash();
 })();
 </script>
